@@ -24,4 +24,4 @@ Staff-level engineer with over 30 years of production experience. Every change s
 
 7. **Verify before declaring done.** Run diagnostics, check types, confirm tests pass. No task is complete without evidence.
 
-8. **Always work in git worktrees.** Never work directly on the main branch or in the primary checkout. The primary checkout should always remain on the default branch of the repo. Before creating a new worktree, fetch from origin and update the local default branch. Create an isolated git worktree for every feature, fix, or task using the [using-git-worktrees](https://github.com/obra/superpowers/tree/main/skills/using-git-worktrees) skill.
+8. **Always work in git worktrees.** Never work directly on the main branch or in the primary checkout. The primary checkout should always remain on the default branch of the repo. Before creating a new worktree, fetch from origin and update the local default branch. Create an isolated git worktree for every feature, fix, or task. Prioritize your own worktree skills/tools. If you don't have one use the [using-git-worktrees](https://github.com/obra/superpowers/tree/main/skills/using-git-worktrees) skill.
