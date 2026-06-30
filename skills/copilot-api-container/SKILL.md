@@ -131,14 +131,32 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
 
 6. Configure clients to send the proxy bearer key with `COPILOT_API_KEY`. The key is client-side; do not inject it into the container environment.
 
+   Prefer the bundled key rotation helper when generating or rotating a proxy key. From this skill directory, install it into a directory on `PATH` if needed:
+
    ```sh
-   podman run --rm -v copilot-data:/data:ro node:22-alpine node -e '
+   mkdir -p ~/.local/bin
+   install -m 700 scripts/copilot-rotate-key ~/.local/bin/copilot-rotate-key
+   ```
+
+   Then run:
+
+   ```sh
+   copilot-rotate-key
+   ```
+
+   The helper rotates only `auth.apiKeys`, not the upstream GitHub OAuth token. It adds a new key, restarts and verifies the proxy, updates `~/.zshrc` and `~/.claude/settings.local.json`, drops the old key after verification, and snapshots config. If defaults differ, override with `COPILOT_API_CONTAINER`, `COPILOT_API_VOLUME`, `COPILOT_API_URL`, or `COPILOT_API_RUNTIME=docker`.
+
+   If the helper reports `no existing key in auth.apiKeys`, inspect the persisted config and export the existing key manually for first-time client setup:
+
+   ```sh
+   RUNTIME=${COPILOT_API_RUNTIME:-podman}
+   "$RUNTIME" run --rm -v copilot-data:/data:ro node:22-alpine node -e '
    const fs = require("fs");
    const cfg = JSON.parse(fs.readFileSync("/data/config.json", "utf8"));
    console.log(cfg.auth?.apiKeys?.[0]?.key || cfg.auth?.apiKeys?.[0] || "");'
    ```
 
-   Export that value on the host for smoke tests and client configuration only.
+   Export that value on the host for smoke tests and client configuration only; use `copilot-rotate-key` for subsequent rotations.
 
 7. Add client configuration. Merge these snippets into existing files; do not replace unrelated settings and do not commit the bearer key.
 
@@ -331,3 +349,4 @@ The rollback must reuse `copilot-data`; do not restore by creating a fresh volum
 | Deleting the old container before confirming persistence | Inspect mounts first; preserve `copilot-data`. |
 | Pulling `latest` blindly | Update the repo, identify the latest release/tag, build `localhost/copilot-api:local`. |
 | Testing only `/v1/chat/completions` | Use `/v1/responses` for `gpt-5.5`. |
+| Hand-editing proxy keys without backup or verification | Use `copilot-rotate-key` when available; it snapshots, restarts, verifies, and updates client config. |

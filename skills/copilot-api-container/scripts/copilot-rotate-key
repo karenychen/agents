@@ -1,0 +1,189 @@
+#!/bin/bash
+# copilot-rotate-key
+#
+# Rotates the proxy API key in the copilot-api volume, in ~/.zshrc, and in
+# ~/.claude/settings.local.json, then restarts the container and verifies.
+#
+# Rotation model: add new key, restart, verify, then drop the old key. If any
+# step fails, the old key stays valid so you are not locked out.
+#
+# This rotates ONLY the proxy `auth.apiKeys` value. It does NOT rotate the
+# upstream GitHub OAuth token; that needs an interactive device-code flow.
+#
+# Files:
+#   ~/.local/state/copilot-api/last-rotation   ISO timestamp of last success
+#   ~/Library/Logs/copilot-api/rotate.log      rolling log
+#   ~/.local/state/copilot-api/backups/        config.json + zshrc + claude snapshots
+#
+# Exit codes:
+#   0  rotation succeeded
+#   1  generic failure (old key still valid)
+#   2  prerequisite missing
+#   3  verification failed after restart
+
+set -u
+
+CONTAINER="${COPILOT_API_CONTAINER:-copilot-api}"
+VOLUME="${COPILOT_API_VOLUME:-copilot-data}"
+PROXY_URL="${COPILOT_API_URL:-http://localhost:4141}"
+RUNTIME="${COPILOT_API_RUNTIME:-podman}"
+ZSHRC="$HOME/.zshrc"
+CLAUDE_SETTINGS="$HOME/.claude/settings.local.json"
+STATE_DIR="$HOME/.local/state/copilot-api"
+BACKUP_DIR="$STATE_DIR/backups"
+LOG_FILE="$HOME/Library/Logs/copilot-api/rotate.log"
+
+mkdir -p "$STATE_DIR" "$BACKUP_DIR" "$(dirname "$LOG_FILE")"
+
+log() {
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE" >&2
+}
+
+notify() {
+  osascript -e "display notification \"$2\" with title \"$1\"" 2>/dev/null || true
+}
+
+die() {
+  log "FAIL: $*"
+  notify "Copilot API rotation FAILED" "$*"
+  exit "${2:-1}"
+}
+
+for cmd in "$RUNTIME" jq openssl curl; do
+  command -v "$cmd" >/dev/null 2>&1 || die "$cmd not found" 2
+done
+
+# 1. Confirm proxy is running.
+"$RUNTIME" ps --format '{{.Names}}' | grep -qx "$CONTAINER" \
+  || die "container $CONTAINER is not running" 1
+
+# 2. Read current config.json.
+log "reading current config from volume $VOLUME"
+CURRENT=$("$RUNTIME" run --rm -v "$VOLUME":/data:ro alpine cat /data/config.json 2>/dev/null) \
+  || die "could not read config.json from volume" 1
+
+OLD_KEY=$(printf '%s' "$CURRENT" | jq -r '.auth.apiKeys[0] // empty')
+[ -n "$OLD_KEY" ] || die "no existing key in auth.apiKeys" 1
+
+# 3. Generate new key.
+NEW_KEY=$(openssl rand -hex 32)
+[ -n "$NEW_KEY" ] && [ "${#NEW_KEY}" -eq 64 ] \
+  || die "failed to generate new key" 1
+
+# 4. Snapshot everything before mutating.
+TS=$(date '+%Y%m%dT%H%M%S')
+SNAPSHOT="$BACKUP_DIR/$TS"
+mkdir -p "$SNAPSHOT"
+printf '%s' "$CURRENT" > "$SNAPSHOT/config.json"
+[ -f "$ZSHRC" ] && cp "$ZSHRC" "$SNAPSHOT/zshrc"
+[ -f "$CLAUDE_SETTINGS" ] && cp "$CLAUDE_SETTINGS" "$SNAPSHOT/claude-settings.local.json"
+log "snapshot saved to $SNAPSHOT"
+
+# 5. Write new config: both keys valid simultaneously. Order is [new, old]
+# so the proxy reports the new key first (apiKeys[0]) on subsequent reads.
+NEW_CONFIG=$(printf '%s' "$CURRENT" \
+  | jq --arg new "$NEW_KEY" --arg old "$OLD_KEY" \
+       '.auth.apiKeys = [$new, $old]') \
+  || die "failed to construct new config json" 1
+
+# Write via a short-lived container because the volume is owned by root inside
+# the container's user namespace.
+printf '%s' "$NEW_CONFIG" | "$RUNTIME" run --rm -i \
+  -v "$VOLUME":/data alpine \
+  sh -c 'cat > /data/config.json.tmp && mv /data/config.json.tmp /data/config.json' \
+  || die "failed to write new config.json" 1
+log "wrote config.json with both keys (new=apiKeys[0])"
+
+# 6. Restart container so the new config is picked up.
+log "restarting container $CONTAINER"
+"$RUNTIME" restart "$CONTAINER" >/dev/null || die "$RUNTIME restart failed" 1
+
+# Wait for /v1/models to respond with the new key.
+log "waiting for proxy to come back with new key"
+ok=0
+for _ in $(seq 1 30); do
+  if curl -sf --max-time 3 "$PROXY_URL/v1/models" \
+       -H "x-api-key: $NEW_KEY" -o /dev/null; then
+    ok=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$ok" -ne 1 ]; then
+  # Roll forward: keep both keys (old still valid), but bail so user knows.
+  die "proxy did not respond to new key within 30s; OLD KEY STILL VALID, manual check required" 3
+fi
+
+log "new key verified against $PROXY_URL/v1/models"
+
+# 7. Update ~/.zshrc (only the export COPILOT_API_KEY line).
+if [ -f "$ZSHRC" ]; then
+  if grep -qE '^export COPILOT_API_KEY=' "$ZSHRC"; then
+    tmp=$(mktemp)
+    while IFS= read -r line; do
+      case "$line" in
+        export\ COPILOT_API_KEY=*) printf 'export COPILOT_API_KEY="%s"\n' "$NEW_KEY" ;;
+        *) printf '%s\n' "$line" ;;
+      esac
+    done < "$ZSHRC" > "$tmp" \
+      && mv "$tmp" "$ZSHRC" \
+      && log "updated COPILOT_API_KEY in $ZSHRC"
+  else
+    printf '\nexport COPILOT_API_KEY="%s"\n' "$NEW_KEY" >> "$ZSHRC"
+    log "appended COPILOT_API_KEY to $ZSHRC"
+  fi
+  chmod 600 "$ZSHRC"
+fi
+
+# 8. Update ~/.claude/settings.local.json (env.ANTHROPIC_AUTH_TOKEN).
+if [ -f "$CLAUDE_SETTINGS" ]; then
+  tmp=$(mktemp)
+  jq --arg key "$NEW_KEY" '.env.ANTHROPIC_AUTH_TOKEN = $key' "$CLAUDE_SETTINGS" > "$tmp" \
+    && mv "$tmp" "$CLAUDE_SETTINGS" \
+    && chmod 600 "$CLAUDE_SETTINGS" \
+    && log "updated ANTHROPIC_AUTH_TOKEN in $CLAUDE_SETTINGS"
+fi
+
+# 9. Drop the old key from config.json (only keep the new one).
+FINAL_CONFIG=$(printf '%s' "$NEW_CONFIG" \
+  | jq --arg new "$NEW_KEY" '.auth.apiKeys = [$new]')
+printf '%s' "$FINAL_CONFIG" | "$RUNTIME" run --rm -i \
+  -v "$VOLUME":/data alpine \
+  sh -c 'cat > /data/config.json.tmp && mv /data/config.json.tmp /data/config.json' \
+  || die "failed to write final config.json (old key still in array, will rotate next time)" 1
+
+"$RUNTIME" restart "$CONTAINER" >/dev/null || log "WARN: restart after final write failed; new key is still active"
+
+# Verify once more.
+sleep 2
+curl -sf --max-time 5 "$PROXY_URL/v1/models" -H "x-api-key: $NEW_KEY" -o /dev/null \
+  || die "final verification failed (check $LOG_FILE)" 3
+
+# Final verification: old key should now be rejected.
+if curl -sf --max-time 5 "$PROXY_URL/v1/models" -H "x-api-key: $OLD_KEY" -o /dev/null 2>&1; then
+  log "WARN: old key STILL accepted by proxy after final write; investigate"
+else
+  log "old key correctly rejected"
+fi
+
+date -u '+%Y-%m-%dT%H:%M:%SZ' > "$STATE_DIR/last-rotation"
+log "rotation complete; new key length=${#NEW_KEY}; snapshot=$SNAPSHOT"
+notify "Copilot API rotated" "New key active. Open a new terminal to pick up updated COPILOT_API_KEY."
+
+# Prune snapshots older than 90 days. Always keep the most recent one,
+# regardless of age, so we can always roll back the change that just ran.
+MAX_AGE_DAYS="${COPILOT_BACKUP_MAX_AGE_DAYS:-90}"
+if [ -d "$BACKUP_DIR" ]; then
+  newest=$(ls -1 "$BACKUP_DIR" 2>/dev/null | sort | tail -n 1)
+  pruned=0
+  while IFS= read -r -d '' path; do
+    name=$(basename "$path")
+    [ "$name" = "$newest" ] && continue
+    rm -rf "$path" && pruned=$((pruned + 1))
+  done < <(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d \
+             -mtime +"$MAX_AGE_DAYS" -print0 2>/dev/null)
+  [ "$pruned" -gt 0 ] && log "pruned $pruned snapshot(s) older than $MAX_AGE_DAYS days"
+fi
+
+exit 0
