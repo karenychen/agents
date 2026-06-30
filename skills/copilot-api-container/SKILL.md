@@ -257,7 +257,7 @@ Verify API behavior with raw curl:
 
 /usr/bin/curl -s http://localhost:4141/v1/models \
   -H "Authorization: Bearer $COPILOT_API_KEY" \
-  | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const j=JSON.parse(s);console.log(JSON.stringify({count:j.data?.length, hasGpt55:j.data?.some(m=>m.id==="gpt-5.5"), bannedClaudeVariantPresent:j.data?.some(m=>/^claude-opus-4\.7(?:1m|-1m-internal)$/.test(m.id))}));})'
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const j=JSON.parse(s);console.log(JSON.stringify({count:j.data?.length, hasGpt55:j.data?.some(m=>m.id==="gpt-5.5"), bannedClaudeVariantPresent:j.data?.some(m=>/^claude-opus-4\.7(?:-1m|-1m-internal)$/.test(m.id))}));})'
 
 /usr/bin/curl -s http://localhost:4141/v1/responses \
   -H "Authorization: Bearer $COPILOT_API_KEY" \
