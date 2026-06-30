@@ -1,5 +1,7 @@
 #!/bin/bash
-# copilot-rotate-key
+# copilot-rotate-key.sh
+#
+# Install as ~/.local/bin/copilot-rotate-key.
 #
 # Rotates the proxy API key in the copilot-api volume, in ~/.zshrc, and in
 # ~/.claude/settings.local.json, then restarts the container and verifies.
@@ -32,6 +34,64 @@ CLAUDE_SETTINGS="$HOME/.claude/settings.local.json"
 STATE_DIR="$HOME/.local/state/copilot-api"
 BACKUP_DIR="$STATE_DIR/backups"
 LOG_FILE="$HOME/Library/Logs/copilot-api/rotate.log"
+
+is_macos() {
+  [ "$(uname -s)" = "Darwin" ]
+}
+
+read_exported_shell_value() {
+  name="$1"
+  [ -f "$ZSHRC" ] || return 1
+
+  line=$(grep -E "^export ${name}=" "$ZSHRC" 2>/dev/null | tail -n 1 || true)
+  [ -n "$line" ] || return 1
+
+  prefix="export ${name}="
+  value="${line#"$prefix"}"
+  case "$value" in
+    \"*\")
+      value="${value#\"}"
+      value="${value%\"}"
+      ;;
+    \'*\')
+      value="${value#\'}"
+      value="${value%\'}"
+      ;;
+  esac
+
+  printf '%s' "$value"
+}
+
+sync_launch_env() {
+  if ! is_macos; then
+    return 0
+  fi
+
+  command -v launchctl >/dev/null 2>&1 || {
+    echo "launchctl not found" >&2
+    return 1
+  }
+
+  copilot_key=$(read_exported_shell_value COPILOT_API_KEY) || {
+    echo "No COPILOT_API_KEY export found in $ZSHRC" >&2
+    return 1
+  }
+  [ -n "$copilot_key" ] || {
+    echo "COPILOT_API_KEY is empty in $ZSHRC" >&2
+    return 1
+  }
+
+  github_key=$(read_exported_shell_value GITHUB_COPILOT_API_KEY || true)
+  [ -n "$github_key" ] || github_key="$copilot_key"
+
+  launchctl setenv COPILOT_API_KEY "$copilot_key"
+  launchctl setenv GITHUB_COPILOT_API_KEY "$github_key"
+}
+
+if [ "${1:-}" = "--sync-launch-env" ]; then
+  sync_launch_env
+  exit $?
+fi
 
 mkdir -p "$STATE_DIR" "$BACKUP_DIR" "$(dirname "$LOG_FILE")"
 
@@ -168,6 +228,13 @@ else
 fi
 
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$STATE_DIR/last-rotation"
+if is_macos; then
+  if sync_launch_env; then
+    log "updated launchctl Copilot API env"
+  else
+    log "WARN: failed to update launchctl Copilot API env"
+  fi
+fi
 log "rotation complete; new key length=${#NEW_KEY}; snapshot=$SNAPSHOT"
 notify "Copilot API rotated" "New key active. Open a new terminal to pick up updated COPILOT_API_KEY."
 
@@ -175,7 +242,12 @@ notify "Copilot API rotated" "New key active. Open a new terminal to pick up upd
 # regardless of age, so we can always roll back the change that just ran.
 MAX_AGE_DAYS="${COPILOT_BACKUP_MAX_AGE_DAYS:-90}"
 if [ -d "$BACKUP_DIR" ]; then
-  newest=$(ls -1 "$BACKUP_DIR" 2>/dev/null | sort | tail -n 1)
+  newest=$(
+    find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null \
+      | while IFS= read -r path; do basename "$path"; done \
+      | sort \
+      | tail -n 1
+  )
   pruned=0
   while IFS= read -r -d '' path; do
     name=$(basename "$path")

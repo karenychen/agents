@@ -86,10 +86,20 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
 4. Run one interactive auth flow if the volume does not already contain a token.
 
    ```sh
-   podman run --rm -it -v copilot-data:/root/.local/share/copilot-api localhost/copilot-api:local --auth
+   podman run --rm -it \
+     -e COPILOT_API_OAUTH_APP=opencode \
+     -v copilot-data:/root/.local/share/copilot-api \
+     localhost/copilot-api:local \
+     --auth
    # Docker variant:
-   docker run --rm -it -v copilot-data:/root/.local/share/copilot-api localhost/copilot-api:local --auth
+   docker run --rm -it \
+     -e COPILOT_API_OAUTH_APP=opencode \
+     -v copilot-data:/root/.local/share/copilot-api \
+     localhost/copilot-api:local \
+     --auth
    ```
+
+   The auth OAuth app must match the start command's `--oauth-app=opencode`. Do not try `--auth --oauth-app=opencode`: the container entrypoint ignores extra flags in the `--auth` branch, while `COPILOT_API_OAUTH_APP=opencode` is read directly by the app.
 
 5. Start the hardened proxy.
 
@@ -101,6 +111,7 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
      -v copilot-data:/root/.local/share/copilot-api \
      --read-only \
      --tmpfs /tmp \
+     --tmpfs /root/.cache \
      --cap-drop=ALL \
      --security-opt=no-new-privileges \
      --memory=512m \
@@ -120,6 +131,7 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
      -v copilot-data:/root/.local/share/copilot-api \
      --read-only \
      --tmpfs /tmp \
+     --tmpfs /root/.cache \
      --cap-drop=ALL \
      --security-opt=no-new-privileges \
      --memory=512m \
@@ -135,7 +147,7 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
 
    ```sh
    mkdir -p ~/.local/bin
-   install -m 700 scripts/copilot-rotate-key ~/.local/bin/copilot-rotate-key
+   install -m 700 scripts/copilot-rotate-key.sh ~/.local/bin/copilot-rotate-key
    ```
 
    Then run:
@@ -144,7 +156,46 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
    copilot-rotate-key
    ```
 
-   The helper rotates only `auth.apiKeys`, not the upstream GitHub OAuth token. It adds a new key, restarts and verifies the proxy, updates `~/.zshrc` and `~/.claude/settings.local.json`, drops the old key after verification, and snapshots config. If defaults differ, override with `COPILOT_API_CONTAINER`, `COPILOT_API_VOLUME`, `COPILOT_API_URL`, or `COPILOT_API_RUNTIME=docker`.
+   The helper rotates only `auth.apiKeys`, not the upstream GitHub OAuth token. It adds a new key, restarts and verifies the proxy, updates `~/.zshrc` and `~/.claude/settings.local.json`, drops the old key after verification, snapshots config, and refreshes `launchctl` on macOS so newly opened GUI apps inherit the current key. If defaults differ, override with `COPILOT_API_CONTAINER`, `COPILOT_API_VOLUME`, `COPILOT_API_URL`, or `COPILOT_API_RUNTIME=docker`.
+
+   On macOS, install this LaunchAgent to refresh the GUI app environment at login without storing the key in the plist:
+
+   ```sh
+   mkdir -p ~/Library/LaunchAgents ~/Library/Logs/copilot-api
+   cat > ~/Library/LaunchAgents/com.user.copilot-api.launch-env.plist <<'PLIST'
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+   <plist version="1.0">
+   <dict>
+     <key>Label</key>
+     <string>com.user.copilot-api.launch-env</string>
+     <key>ProgramArguments</key>
+     <array>
+       <string>/Users/REPLACE_ME/.local/bin/copilot-rotate-key</string>
+       <string>--sync-launch-env</string>
+     </array>
+     <key>RunAtLoad</key>
+     <true/>
+     <key>StandardOutPath</key>
+     <string>/Users/REPLACE_ME/Library/Logs/copilot-api/launch-env.out</string>
+     <key>StandardErrorPath</key>
+     <string>/Users/REPLACE_ME/Library/Logs/copilot-api/launch-env.err</string>
+     <key>EnvironmentVariables</key>
+     <dict>
+       <key>HOME</key>
+       <string>/Users/REPLACE_ME</string>
+       <key>PATH</key>
+       <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+     </dict>
+   </dict>
+   </plist>
+   PLIST
+   sed -i '' "s|/Users/REPLACE_ME|$HOME|g" ~/Library/LaunchAgents/com.user.copilot-api.launch-env.plist
+   plutil -lint ~/Library/LaunchAgents/com.user.copilot-api.launch-env.plist
+   launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.user.copilot-api.launch-env.plist
+   launchctl kickstart -k "gui/$(id -u)/com.user.copilot-api.launch-env"
+   ```
 
    If the helper reports `no existing key in auth.apiKeys`, inspect the persisted config and export the existing key manually for first-time client setup:
 
@@ -167,10 +218,15 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
    model_provider = "copilot"
 
    [model_providers.copilot]
-   name = "copilot"
-   base_url = "http://127.0.0.1:4141/v1"
+   name = "OpenAI"
+   base_url = "http://127.0.0.1:4141"
    env_key = "COPILOT_API_KEY"
+   requires_openai_auth = false
+   supports_websockets = false
    wire_api = "responses"
+   request_max_retries = 3
+   stream_max_retries = 1
+   stream_idle_timeout_ms = 300000
    ```
 
    Claude Code should point at the local proxy in `~/.claude/settings.local.json`, and read the bearer token from the shell environment:
@@ -245,6 +301,7 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
      -v copilot-data:/root/.local/share/copilot-api \
      --read-only \
      --tmpfs /tmp \
+     --tmpfs /root/.cache \
      --cap-drop=ALL \
      --security-opt=no-new-privileges \
      --memory=512m \
@@ -328,6 +385,7 @@ podman run -d \
   -v copilot-data:/root/.local/share/copilot-api \
   --read-only \
   --tmpfs /tmp \
+  --tmpfs /root/.cache \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --memory=512m \
@@ -350,3 +408,5 @@ The rollback must reuse `copilot-data`; do not restore by creating a fresh volum
 | Pulling `latest` blindly | Update the repo, identify the latest release/tag, build `localhost/copilot-api:local`. |
 | Testing only `/v1/chat/completions` | Use `/v1/responses` for `gpt-5.5`. |
 | Hand-editing proxy keys without backup or verification | Use `copilot-rotate-key` when available; it snapshots, restarts, verifies, and updates client config. |
+| Running fresh auth without `COPILOT_API_OAUTH_APP=opencode` | Auth and start must use the same OAuth app namespace or `start --oauth-app=opencode` will not see the token. |
+| Expecting GUI apps to read `~/.zshrc` directly | On macOS, use `copilot-rotate-key --sync-launch-env` or the LaunchAgent above, then reopen already-running apps. |
