@@ -63,6 +63,7 @@ read_exported_shell_value() {
 }
 
 sync_launch_env() {
+  local copilot_key actual_copilot actual_github
   if ! is_macos; then
     return 0
   fi
@@ -81,11 +82,20 @@ sync_launch_env() {
     return 1
   }
 
-  github_key=$(read_exported_shell_value GITHUB_COPILOT_API_KEY || true)
-  [ -n "$github_key" ] || github_key="$copilot_key"
-
   launchctl setenv COPILOT_API_KEY "$copilot_key"
-  launchctl setenv GITHUB_COPILOT_API_KEY "$github_key"
+  actual_copilot=$(launchctl getenv COPILOT_API_KEY 2>/dev/null || true)
+  [ "$actual_copilot" = "$copilot_key" ] || {
+    echo "launchctl COPILOT_API_KEY did not match $ZSHRC" >&2
+    return 1
+  }
+
+  actual_github=$(launchctl getenv GITHUB_COPILOT_API_KEY 2>/dev/null || true)
+  if [ "$actual_github" = "$copilot_key" ]; then
+    launchctl unsetenv GITHUB_COPILOT_API_KEY || {
+      echo "failed to clear launchctl GITHUB_COPILOT_API_KEY" >&2
+      return 1
+    }
+  fi
 }
 
 if [ "${1:-}" = "--sync-launch-env" ]; then
