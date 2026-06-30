@@ -4,7 +4,8 @@
 # Install as ~/.local/bin/copilot-rotate-key.
 #
 # Rotates the proxy API key in the copilot-api volume, in ~/.zshrc, and in
-# ~/.claude/settings.local.json, then restarts the container and verifies.
+# ~/.claude/settings.local.json and ~/.codex/config.toml, then restarts the
+# container and verifies.
 #
 # Rotation model: add new key, restart, verify, then drop the old key. If any
 # step fails, the old key stays valid so you are not locked out.
@@ -31,6 +32,7 @@ PROXY_URL="${COPILOT_API_URL:-http://localhost:4141}"
 RUNTIME="${COPILOT_API_RUNTIME:-podman}"
 ZSHRC="$HOME/.zshrc"
 CLAUDE_SETTINGS="$HOME/.claude/settings.local.json"
+CODEX_CONFIG="$HOME/.codex/config.toml"
 STATE_DIR="$HOME/.local/state/copilot-api"
 BACKUP_DIR="$STATE_DIR/backups"
 LOG_FILE="$HOME/Library/Logs/copilot-api/rotate.log"
@@ -62,23 +64,97 @@ read_exported_shell_value() {
   printf '%s' "$value"
 }
 
-sync_launch_env() {
-  local copilot_key actual_copilot actual_github
-  if ! is_macos; then
-    return 0
-  fi
+sync_codex_config_key() {
+  local key tmp
+  key="$1"
+  [ -f "$CODEX_CONFIG" ] || return 0
 
-  command -v launchctl >/dev/null 2>&1 || {
-    echo "launchctl not found" >&2
+  tmp=$(mktemp) || return 1
+  awk -v key="$key" '
+    function finish_features() {
+      if (in_features && !features_remote_seen) {
+        print "remote_compaction_v2 = false"
+        features_remote_seen = 1
+      }
+    }
+    function finish_set() {
+      if (in_set && !set_token_seen) {
+        print "ANTHROPIC_AUTH_TOKEN = \"" key "\""
+        set_token_seen = 1
+      }
+    }
+    /^\[/ {
+      finish_features()
+      finish_set()
+      in_features = ($0 == "[features]")
+      in_set = ($0 == "[shell_environment_policy.set]")
+      if (in_features) {
+        saw_features = 1
+      }
+      if (in_set) {
+        saw_set = 1
+      }
+      print
+      next
+    }
+    in_features && /^remote_compaction_v2[[:space:]]*=/ {
+      print "remote_compaction_v2 = false"
+      features_remote_seen = 1
+      next
+    }
+    in_set && /^ANTHROPIC_AUTH_TOKEN[[:space:]]*=/ {
+      print "ANTHROPIC_AUTH_TOKEN = \"" key "\""
+      set_token_seen = 1
+      next
+    }
+    { print }
+    END {
+      finish_features()
+      finish_set()
+      if (!saw_features) {
+        print ""
+        print "[features]"
+        print "remote_compaction_v2 = false"
+      }
+      if (!saw_set) {
+        print ""
+        print "[shell_environment_policy.set]"
+        print "ANTHROPIC_AUTH_TOKEN = \"" key "\""
+      }
+    }
+  ' "$CODEX_CONFIG" > "$tmp" || {
+    rm -f "$tmp"
     return 1
   }
+  mv "$tmp" "$CODEX_CONFIG" || {
+    rm -f "$tmp"
+    return 1
+  }
+  chmod 600 "$CODEX_CONFIG" 2>/dev/null || true
+}
 
+sync_launch_env() {
+  local copilot_key actual_copilot actual_github
   copilot_key=$(read_exported_shell_value COPILOT_API_KEY) || {
     echo "No COPILOT_API_KEY export found in $ZSHRC" >&2
     return 1
   }
   [ -n "$copilot_key" ] || {
     echo "COPILOT_API_KEY is empty in $ZSHRC" >&2
+    return 1
+  }
+
+  sync_codex_config_key "$copilot_key" || {
+    echo "failed to update $CODEX_CONFIG" >&2
+    return 1
+  }
+
+  if ! is_macos; then
+    return 0
+  fi
+
+  command -v launchctl >/dev/null 2>&1 || {
+    echo "launchctl not found" >&2
     return 1
   }
 
@@ -147,6 +223,7 @@ mkdir -p "$SNAPSHOT"
 printf '%s' "$CURRENT" > "$SNAPSHOT/config.json"
 [ -f "$ZSHRC" ] && cp "$ZSHRC" "$SNAPSHOT/zshrc"
 [ -f "$CLAUDE_SETTINGS" ] && cp "$CLAUDE_SETTINGS" "$SNAPSHOT/claude-settings.local.json"
+[ -f "$CODEX_CONFIG" ] && cp "$CODEX_CONFIG" "$SNAPSHOT/codex-config.toml"
 log "snapshot saved to $SNAPSHOT"
 
 # 5. Write new config: both keys valid simultaneously. Order is [new, old]
@@ -214,6 +291,8 @@ if [ -f "$CLAUDE_SETTINGS" ]; then
     && chmod 600 "$CLAUDE_SETTINGS" \
     && log "updated ANTHROPIC_AUTH_TOKEN in $CLAUDE_SETTINGS"
 fi
+sync_launch_env \
+  || die "failed to sync client env/config; old key still active" 1
 
 # 9. Drop the old key from config.json (only keep the new one).
 FINAL_CONFIG=$(printf '%s' "$NEW_CONFIG" \
@@ -238,13 +317,6 @@ else
 fi
 
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$STATE_DIR/last-rotation"
-if is_macos; then
-  if sync_launch_env; then
-    log "updated launchctl Copilot API env"
-  else
-    log "WARN: failed to update launchctl Copilot API env"
-  fi
-fi
 log "rotation complete; new key length=${#NEW_KEY}; snapshot=$SNAPSHOT"
 notify "Copilot API rotated" "New key active. Open a new terminal to pick up updated COPILOT_API_KEY."
 

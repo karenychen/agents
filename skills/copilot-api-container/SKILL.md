@@ -156,7 +156,7 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
    copilot-rotate-key
    ```
 
-   The helper rotates only `auth.apiKeys`, not the upstream GitHub OAuth token. It adds a new key, restarts and verifies the proxy, updates `~/.zshrc` and `~/.claude/settings.local.json`, drops the old key after verification, snapshots config, and refreshes `launchctl` on macOS so newly opened GUI apps inherit the current key. If defaults differ, override with `COPILOT_API_CONTAINER`, `COPILOT_API_VOLUME`, `COPILOT_API_URL`, or `COPILOT_API_RUNTIME=docker`.
+   The helper rotates only `auth.apiKeys`, not the upstream GitHub OAuth token. It adds a new key, restarts and verifies the proxy, updates `~/.zshrc`, `~/.claude/settings.local.json`, and `~/.codex/config.toml`, drops the old key after verification, snapshots config, and refreshes `launchctl` on macOS so newly opened GUI apps inherit the current key. The Codex update keeps `shell_environment_policy.set.ANTHROPIC_AUTH_TOKEN` aligned with `COPILOT_API_KEY` and disables `remote_compaction_v2`, because that hosted desktop path requires ChatGPT auth and does not use the local proxy. If defaults differ, override with `COPILOT_API_CONTAINER`, `COPILOT_API_VOLUME`, `COPILOT_API_URL`, or `COPILOT_API_RUNTIME=docker`.
 
    On macOS, install this LaunchAgent to refresh the GUI app environment at login without storing the key in the plist:
 
