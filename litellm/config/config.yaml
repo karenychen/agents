@@ -1,0 +1,29 @@
+# litellm/config/config.yaml
+# Hardened LiteLLM config for GitHub Copilot-backed Claude Code and Codex.
+# Secrets are injected by Podman; this file intentionally contains no tokens.
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  store_model_in_db: false
+
+litellm_settings:
+  drop_params: true
+  telemetry: false
+  turn_off_message_logging: true
+  request_timeout: 600
+
+model_list:
+  - model_name: gpt-5.1-codex
+    litellm_params:
+      model: github_copilot/gpt-5.1-codex
+      extra_headers: &copilot_headers
+        editor-version: "vscode/1.85.1"
+        editor-plugin-version: "copilot/1.155.0"
+        Copilot-Integration-Id: "vscode-chat"
+        user-agent: "GithubCopilot/1.155.0"
+    model_info:
+      mode: responses
+  - model_name: "*"
+    litellm_params:
+      model: github_copilot/*
+      extra_headers: *copilot_headers

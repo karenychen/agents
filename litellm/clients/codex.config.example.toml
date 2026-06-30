@@ -1,0 +1,11 @@
+# Add this to ~/.codex/config.toml.
+
+model = "gpt-5.1-codex"
+model_provider = "litellm-copilot"
+
+[model_providers.litellm-copilot]
+name = "OpenAI"
+base_url = "http://127.0.0.1:4000"
+env_key = "LITELLM_MASTER_KEY"
+wire_api = "responses"
+supports_websockets = false
