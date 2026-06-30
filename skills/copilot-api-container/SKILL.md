@@ -140,6 +140,35 @@ Set up or upgrade `copilot-api` as a loopback-only local proxy while preserving 
 
    Export that value on the host for smoke tests and client configuration only.
 
+7. Add client configuration. Merge these snippets into existing files; do not replace unrelated settings and do not commit the bearer key.
+
+   Codex CLI reads the bearer key from `COPILOT_API_KEY` and uses the Responses API wire format:
+
+   ```toml
+   # ~/.codex/config.toml
+   model_provider = "copilot"
+
+   [model_providers.copilot]
+   name = "copilot"
+   base_url = "http://127.0.0.1:4141/v1"
+   env_key = "COPILOT_API_KEY"
+   wire_api = "responses"
+   ```
+
+   Claude Code should point at the local proxy in `~/.claude/settings.local.json`, and read the bearer token from the shell environment:
+
+   ```json
+   {
+     "env": {
+       "ANTHROPIC_BASE_URL": "http://localhost:4141"
+     }
+   }
+   ```
+
+   ```sh
+   export ANTHROPIC_AUTH_TOKEN="$COPILOT_API_KEY"
+   ```
+
 ## Upgrade Existing Container
 
 1. Inspect current state before changing anything.
