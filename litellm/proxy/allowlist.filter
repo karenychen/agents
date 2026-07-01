@@ -1,6 +1,5 @@
 # litellm/proxy/allowlist.filter
 # Matched against destination host (incl. CONNECT targets). FilterDefaultDeny=Yes,
 # so ONLY hosts matching a line below are permitted.
-^github\.com$
-^api\.github\.com$
-(^|\.)githubcopilot\.com$
+(^|\.)github\.com(:443)?$
+(^|\.)githubcopilot\.com(:443)?$

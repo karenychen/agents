@@ -10,6 +10,9 @@ load_env
 require_env LITELLM_CONTAINER PROXY_CONTAINER INTERNAL_NETWORK EGRESS_NETWORK \
   AUTH_VOLUME MASTER_KEY_SECRET MASTER_KEY_FILE
 
+INGRESS_CONTAINER="${INGRESS_CONTAINER:-litellm-copilot-ingress}"
+INGRESS_NETWORK="${INGRESS_NETWORK:-litellm_ingress}"
+
 timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
 incident_dir="$HOME/.local/state/litellm-copilot/incidents/$timestamp"
 mkdir -p "$incident_dir"
@@ -29,20 +32,20 @@ capture() {
 
 capture podman-ps "$PODMAN" ps -a
 
-for container in "$LITELLM_CONTAINER" "$PROXY_CONTAINER"; do
+for container in "$LITELLM_CONTAINER" "$PROXY_CONTAINER" "$INGRESS_CONTAINER"; do
   if "$PODMAN" container exists "$container"; then
     capture "container-$container-inspect" "$PODMAN" inspect "$container"
     capture "container-$container-logs" "$PODMAN" logs --timestamps "$container"
   fi
 done
 
-for network in "$INTERNAL_NETWORK" "$EGRESS_NETWORK"; do
+for network in "$INTERNAL_NETWORK" "$EGRESS_NETWORK" "$INGRESS_NETWORK"; do
   if "$PODMAN" network exists "$network"; then
     capture "network-$network-inspect" "$PODMAN" network inspect "$network"
   fi
 done
 
-image_names="$("$PODMAN" inspect "$LITELLM_CONTAINER" "$PROXY_CONTAINER" --format '{{.ImageName}}' 2>/dev/null | sort -u || true)"
+image_names="$("$PODMAN" inspect "$LITELLM_CONTAINER" "$PROXY_CONTAINER" "$INGRESS_CONTAINER" --format '{{.ImageName}}' 2>/dev/null | sort -u || true)"
 for image in $image_names; do
   [ -n "$image" ] || continue
   safe_image="${image//[^A-Za-z0-9_.-]/_}"
@@ -50,7 +53,7 @@ for image in $image_names; do
 done
 
 echo ">> stop compromised stack"
-"$PODMAN" rm -f "$LITELLM_CONTAINER" "$PROXY_CONTAINER" >/dev/null 2>&1 || true
+"$PODMAN" rm -f "$LITELLM_CONTAINER" "$PROXY_CONTAINER" "$INGRESS_CONTAINER" >/dev/null 2>&1 || true
 
 if "$PODMAN" volume exists "$AUTH_VOLUME"; then
   auth_archive="$incident_dir/${AUTH_VOLUME}.tar"

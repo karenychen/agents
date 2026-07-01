@@ -9,10 +9,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/scripts/common.sh"
 load_env
 require_env ALPINE_IMAGE TINYPROXY_VERSION LISTEN_ADDR LISTEN_PORT \
-  CONTAINER_HOME LITELLM_UID PROXY_UID EGRESS_PORT LITELLM_CONTAINER \
-  PROXY_CONTAINER INTERNAL_NETWORK EGRESS_NETWORK AUTH_VOLUME \
+  CONTAINER_HOME LITELLM_UID PROXY_UID INGRESS_UID EGRESS_PORT INGRESS_PORT \
+  LITELLM_CONTAINER PROXY_CONTAINER INGRESS_CONTAINER INTERNAL_NETWORK EGRESS_NETWORK INGRESS_NETWORK AUTH_VOLUME \
   MASTER_KEY_SECRET MASTER_KEY_FILE LITELLM_MEMORY LITELLM_CPUS \
-  PROXY_MEMORY PROXY_CPUS MIN_PODMAN_MACHINE_MEMORY_MB
+  PROXY_MEMORY PROXY_CPUS INGRESS_MEMORY INGRESS_CPUS MIN_PODMAN_MACHINE_MEMORY_MB
 
 LITELLM_IMAGE="$(select_litellm_image)"
 TOKEN_DST="$CONTAINER_HOME/.config/litellm/github_copilot"
@@ -29,9 +29,15 @@ echo ">> build egress proxy"
   --build-arg TINYPROXY_VERSION="$TINYPROXY_VERSION" \
   -t localhost/egress-proxy:1 "$HERE/proxy"
 
+echo ">> build ingress proxy"
+"$PODMAN" build \
+  --build-arg ALPINE_IMAGE="$ALPINE_IMAGE" \
+  -t localhost/litellm-ingress:1 "$HERE/ingress"
+
 echo ">> networks"
 "$PODMAN" network exists "$INTERNAL_NETWORK" || "$PODMAN" network create --internal "$INTERNAL_NETWORK"
 "$PODMAN" network exists "$EGRESS_NETWORK" || "$PODMAN" network create "$EGRESS_NETWORK"
+"$PODMAN" network exists "$INGRESS_NETWORK" || "$PODMAN" network create "$INGRESS_NETWORK"
 
 BASE_HARDEN=(
   --cap-drop=ALL
@@ -69,9 +75,20 @@ echo ">> (re)create litellm"
   -e NO_PROXY="127.0.0.1,localhost" \
   -e LITELLM_LOG=WARNING \
   -e LITELLM_LOCAL_MODEL_COST_MAP="True" \
-  -p "$LISTEN_ADDR:$LISTEN_PORT:4000" \
   "$LITELLM_IMAGE" \
   --config /etc/litellm/config.yaml --port 4000 --host 0.0.0.0
+
+echo ">> (re)create ingress proxy"
+"$PODMAN" rm -f "$INGRESS_CONTAINER" >/dev/null 2>&1 || true
+"$PODMAN" run -d --name "$INGRESS_CONTAINER" \
+  --network "$INGRESS_NETWORK" \
+  --user "$INGRESS_UID" \
+  "${BASE_HARDEN[@]}" \
+  --memory="$INGRESS_MEMORY" --memory-swap="$INGRESS_MEMORY" --cpus="$INGRESS_CPUS" \
+  --tmpfs /tmp:rw,size=8m \
+  -p "$LISTEN_ADDR:$LISTEN_PORT:$INGRESS_PORT" \
+  localhost/litellm-ingress:1
+"$PODMAN" network connect "$INTERNAL_NETWORK" "$INGRESS_CONTAINER"
 
 echo ">> waiting for health"
 for i in $(seq 1 30); do

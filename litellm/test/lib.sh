@@ -8,7 +8,8 @@ source "$ROOT/scripts/common.sh"
 load_env
 LITELLM_CTR="${LITELLM_CONTAINER:-litellm-copilot}"
 PROXY_CTR="${PROXY_CONTAINER:-litellm-copilot-egress}"
-export LITELLM_CTR PROXY_CTR
+INGRESS_CTR="${INGRESS_CONTAINER:-litellm-copilot-ingress}"
+export LITELLM_CTR PROXY_CTR INGRESS_CTR
 PASS=0; FAIL=0
 pass() { echo "PASS: $1"; PASS=$((PASS+1)); }
 fail() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }

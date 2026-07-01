@@ -1,11 +1,12 @@
 # LiteLLM GitHub Copilot Proxy
 
-This folder runs LiteLLM in Podman as a local-only proxy for Claude Code and Codex, backed by GitHub Copilot. The runtime is intentionally narrow: a read-only LiteLLM container, a default-deny egress proxy, localhost-only ingress, a Podman secret for the LiteLLM master key, and one named volume for the Copilot auth cache.
+This folder runs LiteLLM in Podman as a local-only proxy for Claude Code and Codex, backed by GitHub Copilot. The runtime is intentionally narrow: a read-only LiteLLM container, a default-deny egress proxy, a no-secret localhost ingress proxy, a Podman secret for the LiteLLM master key, and one named volume for the Copilot auth cache.
 
 ## Layout
 
 - `config/config.yaml` exposes an exact Codex Responses API route plus a wildcard Copilot route, so all Copilot model names route through `github_copilot/*` by default.
 - `proxy/` builds a tinyproxy egress sidecar with a host allowlist.
+- `ingress/` builds a no-secret local ingress sidecar used for host port publishing.
 - `auth.sh` bootstraps the GitHub Copilot token cache into a named Podman volume.
 - `setup.sh` builds/starts the hardened runtime.
 - `clients/` contains shell env helpers and config snippets for Claude Code and Codex.
@@ -24,7 +25,7 @@ cd litellm
 
 `./auth.sh` may print a GitHub device-code prompt. Complete that flow in the browser and wait for the command to print `ok`.
 
-On Podman Machine hosts, the default guard requires at least 4096 MB of VM memory because the LiteLLM image can OOM during startup below that. Increase it with:
+On Podman Machine hosts, the default guard requires about 4 GB of VM memory because the LiteLLM image can OOM during startup below that. A 4 GB machine reports roughly 3888 MB usable inside the VM, so the guard is set to 3800 MB. Increase the VM if needed with:
 
 ```bash
 podman machine stop
@@ -60,15 +61,16 @@ source ./clients/codex.env.sh
 codex
 ```
 
-The provider uses the OpenAI-compatible Responses API and the `gpt-5.1-codex` model alias from `config/config.yaml`.
+The provider uses the OpenAI-compatible Responses API and the `gpt-5.3-codex` model alias from `config/config.yaml`.
 
-`gpt-5.1-codex` is kept as an exact route because Codex uses the Responses API. Other model names fall through to the wildcard `github_copilot/*` route.
+`gpt-5.3-codex` is kept as an exact route because Codex uses the Responses API. Other model names fall through to the wildcard `github_copilot/*` route.
 
 ## Security Shape
 
 - `litellm-copilot` runs with Podman `keep-id` by default, and `litellm-copilot-egress` runs as numeric non-root UID `10001`.
+- `litellm-copilot-ingress` publishes `127.0.0.1:4000` and forwards requests to LiteLLM over the internal network. This avoids publishing directly from an internal-only Podman network on macOS, which can accept host TCP connections without returning HTTP responses.
 - Both containers drop all Linux capabilities, enable `no-new-privileges`, use read-only root filesystems, and have pids, memory, and CPU ceilings.
-- LiteLLM is only published on `127.0.0.1`.
+- Only the ingress sidecar is published on `127.0.0.1`; LiteLLM itself has no published port.
 - LiteLLM has no direct internet network attachment. It can only reach the egress sidecar over the internal network and uses `HTTP_PROXY`/`HTTPS_PROXY`.
 - The egress sidecar default-denies destinations except GitHub OAuth/API and GitHub Copilot hosts.
 - The only persistent runtime write path is the named Copilot auth volume.

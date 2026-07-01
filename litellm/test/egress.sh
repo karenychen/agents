@@ -12,13 +12,24 @@ else
   fail "egress proxy is listening"
 fi
 
-if "$PODMAN" exec "$PROXY_CONTAINER" sh -c "printf 'CONNECT api.github.com:443 HTTP/1.1\r\nHost: api.github.com:443\r\n\r\n' | nc -w 5 127.0.0.1 '$EGRESS_PORT' | grep -q '200'"; then
+connect_status() {
+  local host="$1"
+  "$PODMAN" exec "$LITELLM_CTR" python -c 'import socket, sys
+proxy_host, proxy_port, target = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+request = f"CONNECT {target}:443 HTTP/1.1\r\nHost: {target}:443\r\n\r\n".encode()
+with socket.create_connection((proxy_host, proxy_port), timeout=10) as sock:
+    sock.sendall(request)
+    print(sock.recv(256).decode("utf-8", "replace").splitlines()[0])
+' "$PROXY_CONTAINER" "$EGRESS_PORT" "$host"
+}
+
+if connect_status api.github.com | grep -q '200'; then
   pass "allowlisted GitHub CONNECT succeeds"
 else
   fail "allowlisted GitHub CONNECT succeeds"
 fi
 
-if "$PODMAN" exec "$PROXY_CONTAINER" sh -c "printf 'CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n' | nc -w 5 127.0.0.1 '$EGRESS_PORT' | grep -q '403'"; then
+if connect_status example.com | grep -q '403'; then
   pass "non-allowlisted CONNECT is denied"
 else
   fail "non-allowlisted CONNECT is denied"

@@ -54,5 +54,8 @@ echo "   Follow the device-code prompt printed by LiteLLM, then wait for 'ok'."
   -e HTTPS_PROXY="http://$PROXY_CONTAINER:$EGRESS_PORT" \
   -e HTTP_PROXY="http://$PROXY_CONTAINER:$EGRESS_PORT" \
   -e NO_PROXY="127.0.0.1,localhost" \
+  -e LITELLM_LOG=WARNING \
+  -e LITELLM_LOCAL_MODEL_COST_MAP="True" \
+  --entrypoint python \
   "$LITELLM_IMAGE" \
-  python -c 'import litellm; litellm.completion(model="github_copilot/claude-sonnet-4.5", messages=[{"role":"user","content":"Reply with ok."}], max_tokens=2); print("ok")'
+  -c 'import litellm; litellm.completion(model="github_copilot/claude-sonnet-4.5", messages=[{"role":"user","content":"Reply with ok."}], max_tokens=2); print("ok")'
