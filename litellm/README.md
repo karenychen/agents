@@ -25,6 +25,15 @@ cd litellm
 
 `./auth.sh` may print a GitHub device-code prompt. Complete that flow in the browser and wait for the command to print `ok`.
 
+The scripts auto-detect Podman first, then Docker. To force Docker:
+
+```bash
+cp .env.example .env
+perl -0pi -e 's/CONTAINER_RUNTIME=""/CONTAINER_RUNTIME="docker"/' .env
+```
+
+Podman on macOS is the most hardened path because it supports `podman secret` for the LiteLLM master key. Docker is supported with the same container topology and hardening flags, but standalone Docker does not provide `docker run` secrets; the script passes `LITELLM_MASTER_KEY` through the container environment from the local `0600` key file.
+
 On Podman Machine hosts, the default guard requires about 4 GB of VM memory because the LiteLLM image can OOM during startup below that. A 4 GB machine reports roughly 3888 MB usable inside the VM, so the guard is set to 3800 MB. Increase the VM if needed with:
 
 ```bash

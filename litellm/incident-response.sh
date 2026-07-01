@@ -33,14 +33,14 @@ capture() {
 capture podman-ps "$PODMAN" ps -a
 
 for container in "$LITELLM_CONTAINER" "$PROXY_CONTAINER" "$INGRESS_CONTAINER"; do
-  if "$PODMAN" container exists "$container"; then
+  if container_exists "$container"; then
     capture "container-$container-inspect" "$PODMAN" inspect "$container"
     capture "container-$container-logs" "$PODMAN" logs --timestamps "$container"
   fi
 done
 
 for network in "$INTERNAL_NETWORK" "$EGRESS_NETWORK" "$INGRESS_NETWORK"; do
-  if "$PODMAN" network exists "$network"; then
+  if network_exists "$network"; then
     capture "network-$network-inspect" "$PODMAN" network inspect "$network"
   fi
 done
@@ -55,7 +55,7 @@ done
 echo ">> stop compromised stack"
 "$PODMAN" rm -f "$LITELLM_CONTAINER" "$PROXY_CONTAINER" "$INGRESS_CONTAINER" >/dev/null 2>&1 || true
 
-if "$PODMAN" volume exists "$AUTH_VOLUME"; then
+if volume_exists "$AUTH_VOLUME"; then
   auth_archive="$incident_dir/${AUTH_VOLUME}.tar"
   echo ">> export and remove auth volume"
   "$PODMAN" volume export "$AUTH_VOLUME" -o "$auth_archive"
@@ -66,9 +66,11 @@ else
 fi
 
 echo ">> rotate LiteLLM master key"
-"$PODMAN" secret rm "$MASTER_KEY_SECRET" >/dev/null 2>&1 || true
+is_podman && "$PODMAN" secret rm "$MASTER_KEY_SECRET" >/dev/null 2>&1 || true
 new_key="sk-$(openssl rand -hex 32)"
-printf '%s' "$new_key" | "$PODMAN" secret create "$MASTER_KEY_SECRET" - >/dev/null
+if is_podman; then
+  printf '%s' "$new_key" | "$PODMAN" secret create "$MASTER_KEY_SECRET" - >/dev/null
+fi
 mkdir -p "$(dirname "$MASTER_KEY_FILE")"
 ( umask 077; printf '%s\n' "$new_key" > "$MASTER_KEY_FILE" )
 chmod 600 "$MASTER_KEY_FILE"

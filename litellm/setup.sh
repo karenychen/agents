@@ -21,6 +21,7 @@ set_litellm_user_args
 ensure_podman_ready
 ensure_machine_memory
 ensure_master_key
+set_litellm_secret_args
 ensure_auth_volume_owned
 
 echo ">> build egress proxy"
@@ -35,9 +36,9 @@ echo ">> build ingress proxy"
   -t localhost/litellm-ingress:1 "$HERE/ingress"
 
 echo ">> networks"
-"$PODMAN" network exists "$INTERNAL_NETWORK" || "$PODMAN" network create --internal "$INTERNAL_NETWORK"
-"$PODMAN" network exists "$EGRESS_NETWORK" || "$PODMAN" network create "$EGRESS_NETWORK"
-"$PODMAN" network exists "$INGRESS_NETWORK" || "$PODMAN" network create "$INGRESS_NETWORK"
+network_exists "$INTERNAL_NETWORK" || "$PODMAN" network create --internal "$INTERNAL_NETWORK"
+network_exists "$EGRESS_NETWORK" || "$PODMAN" network create "$EGRESS_NETWORK"
+network_exists "$INGRESS_NETWORK" || "$PODMAN" network create "$INGRESS_NETWORK"
 
 BASE_HARDEN=(
   --cap-drop=ALL
@@ -67,8 +68,8 @@ echo ">> (re)create litellm"
   --memory="$LITELLM_MEMORY" --memory-swap="$LITELLM_MEMORY" --cpus="$LITELLM_CPUS" \
   --tmpfs /tmp:rw,size=16m \
   --mount "type=volume,src=$AUTH_VOLUME,dst=$TOKEN_DST" \
-  --mount "type=bind,src=$HERE/config/config.yaml,dst=/etc/litellm/config.yaml,ro=true" \
-  --secret "$MASTER_KEY_SECRET,type=env,target=LITELLM_MASTER_KEY" \
+  --mount "$(config_mount_arg)" \
+  "${LITELLM_SECRET_ARGS[@]}" \
   -e HOME="$CONTAINER_HOME" \
   -e HTTPS_PROXY="http://$PROXY_CONTAINER:$EGRESS_PORT" \
   -e HTTP_PROXY="http://$PROXY_CONTAINER:$EGRESS_PORT" \

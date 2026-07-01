@@ -20,8 +20,8 @@ ensure_machine_memory
 ensure_auth_volume_owned
 
 echo ">> ensure egress proxy is available"
-if ! "$PODMAN" container exists "$PROXY_CONTAINER"; then
-  "$PODMAN" network exists "$EGRESS_NETWORK" || "$PODMAN" network create "$EGRESS_NETWORK"
+if ! container_exists "$PROXY_CONTAINER"; then
+  network_exists "$EGRESS_NETWORK" || "$PODMAN" network create "$EGRESS_NETWORK"
   "$PODMAN" build \
     --build-arg ALPINE_IMAGE="$ALPINE_IMAGE" \
     --build-arg TINYPROXY_VERSION="$TINYPROXY_VERSION" \
