@@ -61,11 +61,11 @@ source ./clients/codex.env.sh
 codex
 ```
 
-The provider uses the OpenAI-compatible Responses API and the `gpt-5.3-codex` model alias from `config/config.yaml`.
+The provider uses the OpenAI-compatible Responses API and the `gpt-5.5` model alias from `config/config.yaml`.
 
-`gpt-5.3-codex` is kept as an exact route because Codex uses the Responses API. Other model names fall through to the wildcard `github_copilot/*` route.
+`gpt-5.5` and `gpt-5.3-codex` are kept as exact routes because they use the Responses API. Other model names fall through to the wildcard `github_copilot/*` route.
 
-`gpt-5.3-codex` is also the newest Codex Responses model verified on this account during local setup; `gpt-5.4-codex`, `gpt-5.5-codex`, and `gpt-5.1-codex` returned Copilot `model_not_supported` errors.
+`gpt-5.5` is the default for Codex. `gpt-5.3-codex` remains available as an explicit Responses route.
 
 ## Security Shape
 

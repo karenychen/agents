@@ -1,6 +1,6 @@
 # Add this to ~/.codex/config.toml.
 
-model = "gpt-5.3-codex"
+model = "gpt-5.5"
 model_provider = "litellm-copilot"
 
 [model_providers.litellm-copilot]
