@@ -9,15 +9,15 @@ source "$HERE/scripts/common.sh"
 load_env
 require_env ALPINE_IMAGE TINYPROXY_VERSION CONTAINER_HOME LITELLM_UID PROXY_UID \
   EGRESS_PORT PROXY_CONTAINER EGRESS_NETWORK AUTH_VOLUME LITELLM_MEMORY \
-  PROXY_MEMORY PROXY_CPUS MIN_PODMAN_MACHINE_MEMORY_MB
+  PROXY_MEMORY PROXY_CPUS
 
 LITELLM_IMAGE="$(select_litellm_image)"
 TOKEN_DST="$CONTAINER_HOME/.config/litellm/github_copilot"
 set_litellm_user_args
 
-ensure_podman_ready
-ensure_machine_memory
+ensure_runtime_ready
 ensure_auth_volume_owned
+set_tty_args
 
 echo ">> ensure egress proxy is available"
 if ! container_exists "$PROXY_CONTAINER"; then
@@ -40,7 +40,7 @@ fi
 
 echo ">> start GitHub Copilot device auth"
 echo "   Follow the device-code prompt printed by LiteLLM, then wait for 'ok'."
-"$PODMAN" run --rm -it --name litellm-copilot-auth \
+"$PODMAN" run --rm "${TTY_ARGS[@]}" --name litellm-copilot-auth \
   --network "$EGRESS_NETWORK" \
   "${LITELLM_USER_ARGS[@]}" \
   --cap-drop=ALL \

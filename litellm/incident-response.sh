@@ -30,7 +30,7 @@ capture() {
   chmod 600 "$incident_dir/$name.txt" 2>/dev/null || true
 }
 
-capture podman-ps "$PODMAN" ps -a
+capture container-ps "$PODMAN" ps -a
 
 for container in "$LITELLM_CONTAINER" "$PROXY_CONTAINER" "$INGRESS_CONTAINER"; do
   if container_exists "$container"; then
@@ -66,11 +66,7 @@ else
 fi
 
 echo ">> rotate LiteLLM master key"
-is_podman && "$PODMAN" secret rm "$MASTER_KEY_SECRET" >/dev/null 2>&1 || true
 new_key="sk-$(openssl rand -hex 32)"
-if is_podman; then
-  printf '%s' "$new_key" | "$PODMAN" secret create "$MASTER_KEY_SECRET" - >/dev/null
-fi
 mkdir -p "$(dirname "$MASTER_KEY_FILE")"
 ( umask 077; printf '%s\n' "$new_key" > "$MASTER_KEY_FILE" )
 chmod 600 "$MASTER_KEY_FILE"

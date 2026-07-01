@@ -1,6 +1,6 @@
 # litellm/config/config.yaml
 # Hardened LiteLLM config for GitHub Copilot-backed Claude Code and Codex.
-# Secrets are injected by Podman; this file intentionally contains no tokens.
+# Secrets are injected by the container runtime; this file intentionally contains no tokens.
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
@@ -13,9 +13,57 @@ litellm_settings:
   request_timeout: 600
 
 model_list:
-  - model_name: gpt-5.5
+  - model_name: claude-opus-4.6
     litellm_params:
-      model: github_copilot/gpt-5.5
+      model: github_copilot/claude-opus-4.6
+      extra_headers: &copilot_headers
+        editor-version: "vscode/1.85.1"
+        editor-plugin-version: "copilot/1.155.0"
+        Copilot-Integration-Id: "vscode-chat"
+        user-agent: "GithubCopilot/1.155.0"
+  - model_name: claude-opus-4.7
+    litellm_params:
+      model: github_copilot/claude-opus-4.7
+      extra_headers: *copilot_headers
+  - model_name: claude-opus-4.8
+    litellm_params:
+      model: github_copilot/claude-opus-4.8
+      extra_headers: *copilot_headers
+  - model_name: claude-sonnet-4.5
+    litellm_params:
+      model: github_copilot/claude-sonnet-4.5
+      extra_headers: *copilot_headers
+  - model_name: claude-sonnet-4.6
+    litellm_params:
+      model: github_copilot/claude-sonnet-4.6
+      extra_headers: *copilot_headers
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: github_copilot/claude-sonnet-5
+      extra_headers: *copilot_headers
+  - model_name: claude-haiku-4.5
+    litellm_params:
+      model: github_copilot/claude-haiku-4.5
+      extra_headers: *copilot_headers
+  - model_name: gemini-2.5-pro
+    litellm_params:
+      model: github_copilot/gemini-2.5-pro
+      extra_headers: *copilot_headers
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: github_copilot/gemini-3-flash-preview
+      extra_headers: *copilot_headers
+  - model_name: gemini-3.1-pro-preview
+    litellm_params:
+      model: github_copilot/gemini-3.1-pro-preview
+      extra_headers: *copilot_headers
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: github_copilot/gemini-3.5-flash
+      extra_headers: *copilot_headers
+  - model_name: gpt-5-mini
+    litellm_params:
+      model: github_copilot/gpt-5-mini
     model_info:
       mode: responses
   - model_name: gpt-5.3-codex
@@ -23,11 +71,23 @@ model_list:
       model: github_copilot/gpt-5.3-codex
     model_info:
       mode: responses
-  - model_name: "*"
+  - model_name: gpt-5.4
     litellm_params:
-      model: github_copilot/*
-      extra_headers:
-        editor-version: "vscode/1.85.1"
-        editor-plugin-version: "copilot/1.155.0"
-        Copilot-Integration-Id: "vscode-chat"
-        user-agent: "GithubCopilot/1.155.0"
+      model: github_copilot/gpt-5.4
+    model_info:
+      mode: responses
+  - model_name: gpt-5.4-mini
+    litellm_params:
+      model: github_copilot/gpt-5.4-mini
+    model_info:
+      mode: responses
+  - model_name: gpt-5.5
+    litellm_params:
+      model: github_copilot/gpt-5.5
+    model_info:
+      mode: responses
+  - model_name: mai-code-1-flash-picker
+    litellm_params:
+      model: github_copilot/mai-code-1-flash-picker
+    model_info:
+      mode: responses
