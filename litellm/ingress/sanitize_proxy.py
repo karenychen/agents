@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 UPSTREAM_HOST = "litellm-copilot"
 UPSTREAM_PORT = 4000
 STRIP_KEY = "internal_chat_message_metadata_passthrough"
+UPSTREAM_UNAVAILABLE_BODY = b'{"error":"upstream unavailable"}'
 
 
 def strip_internal_metadata(value):
@@ -68,6 +69,13 @@ class Handler(BaseHTTPRequestHandler):
             connection.request(self.command, self.path, body=body, headers=headers)
             response = connection.getresponse()
             response_body = response.read()
+        except (OSError, http.client.HTTPException):
+            self.send_response(503, "Service Unavailable")
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(UPSTREAM_UNAVAILABLE_BODY)))
+            self.end_headers()
+            self.wfile.write(UPSTREAM_UNAVAILABLE_BODY)
+            return
         finally:
             connection.close()
 

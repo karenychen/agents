@@ -2,6 +2,7 @@
 import http.client
 import importlib.util
 import json
+import socket
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -83,6 +84,27 @@ class SanitizeProxyTest(unittest.TestCase):
             "internal_chat_message_metadata_passthrough",
             json.dumps(forwarded),
         )
+
+    def test_returns_gateway_error_when_upstream_is_unavailable(self):
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            unused_port = sock.getsockname()[1]
+
+        sanitize_proxy.UPSTREAM_HOST = "127.0.0.1"
+        sanitize_proxy.UPSTREAM_PORT = unused_port
+        proxy = ThreadingHTTPServer(("127.0.0.1", 0), sanitize_proxy.Handler)
+        thread = threading.Thread(target=proxy.serve_forever, daemon=True)
+        thread.start()
+        conn = http.client.HTTPConnection("127.0.0.1", proxy.server_port)
+        try:
+            conn.request("GET", "/health/liveliness")
+            response = conn.getresponse()
+            self.assertEqual(response.status, 503)
+            self.assertIn(b"upstream unavailable", response.read())
+        finally:
+            conn.close()
+            proxy.shutdown()
+            proxy.server_close()
 
 
 if __name__ == "__main__":
