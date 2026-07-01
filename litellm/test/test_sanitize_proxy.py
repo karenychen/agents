@@ -75,7 +75,9 @@ class SanitizeProxyTest(unittest.TestCase):
                 body=json.dumps(body),
                 headers={"content-type": "application/json"},
             )
-            self.assertEqual(conn.getresponse().status, 200)
+            response = conn.getresponse()
+            self.assertEqual(response.status, 200)
+            response.read()
         finally:
             conn.close()
 

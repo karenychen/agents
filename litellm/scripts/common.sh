@@ -134,6 +134,32 @@ network_exists() {
   "$PODMAN" network inspect "$1" >/dev/null 2>&1
 }
 
+network_subnet() {
+  "$PODMAN" network inspect "$1" --format '{{range .IPAM.Config}}{{println .Subnet}}{{end}}' 2>/dev/null \
+    | sed -n '1p'
+}
+
+ensure_network_with_subnet() {
+  local network="$1"
+  local subnet="$2"
+  local internal_arg=()
+  local existing_subnet
+
+  if [ "${3:-}" = "--internal" ]; then
+    internal_arg=(--internal)
+  fi
+
+  if network_exists "$network"; then
+    existing_subnet="$(network_subnet "$network")"
+    if [ "$existing_subnet" = "$subnet" ]; then
+      return
+    fi
+    "$PODMAN" network rm "$network" >/dev/null
+  fi
+
+  "$PODMAN" network create "${internal_arg[@]}" --subnet "$subnet" "$network"
+}
+
 volume_exists() {
   "$PODMAN" volume inspect "$1" >/dev/null 2>&1
 }

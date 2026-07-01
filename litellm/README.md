@@ -74,6 +74,7 @@ The provider uses the OpenAI-compatible Responses API and the `gpt-5.5` model al
 - Both containers drop all Linux capabilities, enable `no-new-privileges`, use read-only root filesystems, and have pids, memory, and CPU ceilings.
 - Only the ingress sidecar is published on `127.0.0.1`; LiteLLM itself has no published port.
 - LiteLLM has no direct internet network attachment. It can only reach the egress sidecar over the internal network and uses `HTTP_PROXY`/`HTTPS_PROXY`.
+- The egress sidecar only accepts proxy requests from LiteLLM's fixed internal IP.
 - The egress sidecar default-denies destinations except GitHub OAuth/API and GitHub Copilot hosts.
 - The only persistent runtime write path is the named Copilot auth volume.
 - The LiteLLM master key is stored at `~/.config/litellm/master_key` with mode `0600` for local client wiring.

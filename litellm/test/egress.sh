@@ -13,8 +13,9 @@ else
 fi
 
 connect_status() {
-  local host="$1"
-  "$PODMAN" exec "$LITELLM_CTR" python -c 'import socket, sys
+  local container="$1"
+  local host="$2"
+  "$PODMAN" exec "$container" python -c 'import socket, sys
 proxy_host, proxy_port, target = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 request = f"CONNECT {target}:443 HTTP/1.1\r\nHost: {target}:443\r\n\r\n".encode()
 with socket.create_connection((proxy_host, proxy_port), timeout=10) as sock:
@@ -23,16 +24,22 @@ with socket.create_connection((proxy_host, proxy_port), timeout=10) as sock:
 ' "$PROXY_CONTAINER" "$EGRESS_PORT" "$host"
 }
 
-if connect_status api.github.com | grep -q '200'; then
+if connect_status "$LITELLM_CTR" api.github.com | grep -q '200'; then
   pass "allowlisted GitHub CONNECT succeeds"
 else
   fail "allowlisted GitHub CONNECT succeeds"
 fi
 
-if connect_status example.com | grep -q '403'; then
+if connect_status "$LITELLM_CTR" example.com | grep -q '403'; then
   pass "non-allowlisted CONNECT is denied"
 else
   fail "non-allowlisted CONNECT is denied"
+fi
+
+if connect_status "$INGRESS_CTR" api.github.com | grep -q '403'; then
+  pass "non-LiteLLM container CONNECT is denied"
+else
+  fail "non-LiteLLM container CONNECT is denied"
 fi
 
 finish
