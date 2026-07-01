@@ -58,4 +58,4 @@ echo "   Follow the device-code prompt printed by LiteLLM, then wait for 'ok'."
   -e LITELLM_LOCAL_MODEL_COST_MAP="True" \
   --entrypoint python \
   "$LITELLM_IMAGE" \
-  -c 'import litellm; litellm.completion(model="github_copilot/claude-sonnet-4.5", messages=[{"role":"user","content":"Reply with ok."}], max_tokens=2); print("ok")'
+  -c 'import litellm; litellm.completion(model="github_copilot/claude-sonnet-5", messages=[{"role":"user","content":"Reply with ok."}], max_tokens=2); print("ok")'

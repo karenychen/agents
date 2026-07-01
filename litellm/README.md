@@ -48,7 +48,7 @@ Or run a single command with the proxy env applied:
 ./clients/claude-code.env.sh claude
 ```
 
-The default Claude Code model is `claude-sonnet-4.5`. Because `config/config.yaml` has a wildcard route, other Copilot model names can be selected without adding a new config entry unless that model needs endpoint-specific metadata.
+The default Claude Code model is `claude-sonnet-5`, with `claude-opus-4.8` as the Opus default. Both were verified against this Copilot account through the local proxy. Because `config/config.yaml` has a wildcard route, other Copilot model names can be selected without adding a new config entry unless that model needs endpoint-specific metadata.
 
 If you prefer Claude settings, copy the non-secret values from `clients/claude-code.settings.example.json`, then set `ANTHROPIC_AUTH_TOKEN` from `~/.config/litellm/master_key` in your launch environment.
 
@@ -64,6 +64,8 @@ codex
 The provider uses the OpenAI-compatible Responses API and the `gpt-5.3-codex` model alias from `config/config.yaml`.
 
 `gpt-5.3-codex` is kept as an exact route because Codex uses the Responses API. Other model names fall through to the wildcard `github_copilot/*` route.
+
+`gpt-5.3-codex` is also the newest Codex Responses model verified on this account during local setup; `gpt-5.4-codex`, `gpt-5.5-codex`, and `gpt-5.1-codex` returned Copilot `model_not_supported` errors.
 
 ## Security Shape
 

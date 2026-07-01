@@ -11,9 +11,9 @@ require_env LISTEN_ADDR LISTEN_PORT MASTER_KEY_FILE
 export ANTHROPIC_BASE_URL="http://$LISTEN_ADDR:$LISTEN_PORT"
 anthropic_auth_token="$(master_key)"
 export ANTHROPIC_AUTH_TOKEN="$anthropic_auth_token"
-export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4.5}"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-4.5}"
-export ANTHROPIC_DEFAULT_OPUS_MODEL="${ANTHROPIC_DEFAULT_OPUS_MODEL:-claude-opus-4.5}"
+export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-5}"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-5}"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="${ANTHROPIC_DEFAULT_OPUS_MODEL:-claude-opus-4.8}"
 unset ANTHROPIC_API_KEY
 
 if [ "${BASH_SOURCE[0]}" = "$0" ] && [ "$#" -gt 0 ]; then
