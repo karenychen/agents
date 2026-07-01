@@ -20,6 +20,11 @@ def strip_internal_metadata(value):
     return value
 
 
+def is_responses_path(path):
+    path_without_query = path.split("?", 1)[0].rstrip("/")
+    return path_without_query in {"/responses", "/v1/responses"}
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -49,7 +54,7 @@ class Handler(BaseHTTPRequestHandler):
             if key.lower() not in {"host", "content-length", "connection"}
         }
 
-        if body and self.path.startswith("/v1/responses"):
+        if body and is_responses_path(self.path):
             content_type = self.headers.get("content-type", "")
             if "application/json" in content_type:
                 body = json.dumps(
