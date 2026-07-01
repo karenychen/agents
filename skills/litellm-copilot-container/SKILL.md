@@ -15,7 +15,7 @@ allowed-tools:
 
 # LiteLLM Copilot Container
 
-Set up `~/projects/agents/litellm` as a loopback-only LiteLLM proxy to GitHub Copilot with a small compromise blast radius. Podman is the primary validated path; Docker is supported with the same topology, but without Podman secrets.
+Set up `litellm/` as a loopback-only LiteLLM proxy to GitHub Copilot with a small compromise blast radius. Docker is the primary supported path.
 
 ## When to Use
 
@@ -61,12 +61,9 @@ The proxy uses a named auth volume `litellm_copilot_auth`. Podman uses secret `l
 2. Clone/update this repo and choose runtime.
 
    ```sh
-   mkdir -p ~/projects
-   git clone <agents-repo-url> ~/projects/agents
-   cd ~/projects/agents/litellm
+   git clone <agents-repo-url> agents
+   cd agents/litellm
    cp .env.example .env
-   # Optional Docker override:
-   perl -0pi -e 's/CONTAINER_RUNTIME=""/CONTAINER_RUNTIME="docker"/' .env
    ```
 
 3. Authenticate Copilot into the isolated volume.
@@ -137,7 +134,7 @@ Use an API key helper instead of hardcoding the key:
 
 ```json
 {
-  "apiKeyHelper": "/Users/<you>/.local/bin/litellm-master-key",
+  "apiKeyHelper": "<absolute-path-to-home>/.local/bin/litellm-master-key",
   "env": {
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",
     "ANTHROPIC_MODEL": "claude-sonnet-5",
@@ -172,7 +169,7 @@ launchctl setenv ANTHROPIC_MODEL "claude-sonnet-5"
 Run:
 
 ```sh
-cd ~/projects/agents/litellm
+cd litellm
 ./incident-response.sh
 ```
 
@@ -183,7 +180,7 @@ Then revoke the GitHub OAuth/Copilot authorization, re-run `./auth.sh`, `./setup
 Before claiming success:
 
 ```sh
-cd ~/projects/agents/litellm
+cd litellm
 find . -name '*.sh' -exec bash -n {} \;
 python3 -m py_compile ingress/sanitize_proxy.py
 ./setup.sh
