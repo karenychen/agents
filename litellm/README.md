@@ -6,7 +6,7 @@ This folder runs LiteLLM in Podman as a local-only proxy for Claude Code and Cod
 
 - `config/config.yaml` exposes an exact Codex Responses API route plus a wildcard Copilot route, so all Copilot model names route through `github_copilot/*` by default.
 - `proxy/` builds a tinyproxy egress sidecar with a host allowlist.
-- `ingress/` builds a no-secret local ingress sidecar used for host port publishing.
+- `ingress/` builds a no-secret local ingress sidecar used for host port publishing. It also strips Codex-only `internal_chat_message_metadata_passthrough` fields from Responses requests because Copilot rejects that internal client metadata.
 - `auth.sh` bootstraps the GitHub Copilot token cache into a named Podman volume.
 - `setup.sh` builds/starts the hardened runtime.
 - `clients/` contains shell env helpers and config snippets for Claude Code and Codex.
