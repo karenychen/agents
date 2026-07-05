@@ -21,6 +21,10 @@ Routine daily re-auth is not expected. The running `copilot-api` service reads t
 
 Run `./scripts/auth.sh` again only when the persisted GitHub token is no longer valid, the OAuth authorization was revoked, the Docker volume was deleted, or incident response requires credential rotation.
 
+## Codex streaming stability
+
+Keep `useResponsesApiWebSocket` set to `false` in `/data/config.json`. This avoids a known Codex/copilot-api failure mode where the upstream Responses WebSocket stream closes before `response.completed`, often after `internal_chat_message_metadata_passthrough` or transient `service_unavailable` errors.
+
 ## Validate
 
 ```sh
