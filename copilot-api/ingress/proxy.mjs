@@ -18,6 +18,9 @@ const hopByHopHeaders = new Set([
   "upgrade",
 ])
 
+const responsePaths = new Set(["/responses", "/v1/responses"])
+const maxBufferedRequestBytes = 128 * 1024 * 1024
+
 function forwardHeaders(headers) {
   const forwarded = {}
   for (const [name, value] of Object.entries(headers)) {
@@ -29,7 +32,104 @@ function forwardHeaders(headers) {
   return forwarded
 }
 
-const server = http.createServer((clientRequest, clientResponse) => {
+function shouldSanitizeRequest(clientRequest) {
+  const path = new URL(clientRequest.url ?? "/", "http://localhost").pathname
+  const contentType = clientRequest.headers["content-type"] ?? ""
+
+  return (
+    clientRequest.method === "POST"
+    && responsePaths.has(path)
+    && String(contentType).toLowerCase().includes("application/json")
+  )
+}
+
+function readRequestBody(clientRequest) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    let length = 0
+
+    clientRequest.on("data", (chunk) => {
+      length += chunk.length
+      if (length > maxBufferedRequestBytes) {
+        reject(new Error("request body is too large to sanitize"))
+        clientRequest.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+
+    clientRequest.on("end", () => resolve(Buffer.concat(chunks)))
+    clientRequest.on("error", reject)
+  })
+}
+
+function sanitizeResponsesValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeResponsesValue)
+  }
+
+  if (value === null || typeof value !== "object") {
+    return value
+  }
+
+  const isCustomToolCall = value.type === "custom_tool_call"
+  const sanitized = {}
+  for (const [key, childValue] of Object.entries(value)) {
+    if (key === "internal_chat_message_metadata_passthrough") {
+      continue
+    }
+    if (isCustomToolCall && (key === "id" || key === "status")) {
+      continue
+    }
+    sanitized[key] = sanitizeResponsesValue(childValue)
+  }
+  return sanitized
+}
+
+function sanitizeRequestBody(body) {
+  try {
+    return Buffer.from(
+      JSON.stringify(sanitizeResponsesValue(JSON.parse(body.toString("utf8")))),
+    )
+  } catch {
+    return body
+  }
+}
+
+function writeBadGateway(clientResponse) {
+  if (!clientResponse.headersSent) {
+    clientResponse.writeHead(502, { "content-type": "application/json" })
+  }
+  clientResponse.end(
+    JSON.stringify({
+      error: {
+        message: "copilot-api upstream is unavailable",
+        type: "bad_gateway",
+      },
+    }),
+  )
+}
+
+function writePayloadTooLarge(clientResponse) {
+  if (!clientResponse.headersSent) {
+    clientResponse.writeHead(413, { "content-type": "application/json" })
+  }
+  clientResponse.end(
+    JSON.stringify({
+      error: {
+        message: "request body is too large to sanitize",
+        type: "payload_too_large",
+      },
+    }),
+  )
+}
+
+function createUpstreamRequest(clientRequest, clientResponse, body) {
+  const headers = forwardHeaders(clientRequest.headers)
+  if (body) {
+    headers["content-length"] = String(body.length)
+  }
+
   const upstreamRequest = http.request(
     {
       protocol: upstreamOrigin.protocol,
@@ -37,7 +137,7 @@ const server = http.createServer((clientRequest, clientResponse) => {
       port: upstreamOrigin.port,
       method: clientRequest.method,
       path: clientRequest.url,
-      headers: forwardHeaders(clientRequest.headers),
+      headers,
     },
     (upstreamResponse) => {
       clientResponse.writeHead(
@@ -50,20 +150,33 @@ const server = http.createServer((clientRequest, clientResponse) => {
   )
 
   upstreamRequest.on("error", () => {
-    if (!clientResponse.headersSent) {
-      clientResponse.writeHead(502, { "content-type": "application/json" })
-    }
-    clientResponse.end(
-      JSON.stringify({
-        error: {
-          message: "copilot-api upstream is unavailable",
-          type: "bad_gateway",
-        },
-      }),
-    )
+    writeBadGateway(clientResponse)
   })
 
+  if (body) {
+    upstreamRequest.end(body)
+    return
+  }
+
   pipeline(clientRequest, upstreamRequest, () => {})
+}
+
+const server = http.createServer(async (clientRequest, clientResponse) => {
+  if (!shouldSanitizeRequest(clientRequest)) {
+    createUpstreamRequest(clientRequest, clientResponse)
+    return
+  }
+
+  try {
+    const body = await readRequestBody(clientRequest)
+    createUpstreamRequest(
+      clientRequest,
+      clientResponse,
+      sanitizeRequestBody(body),
+    )
+  } catch {
+    writePayloadTooLarge(clientResponse)
+  }
 })
 
 server.listen(listenPort, listenHost, () => {

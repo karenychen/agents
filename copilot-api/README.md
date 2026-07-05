@@ -25,11 +25,15 @@ Run `./scripts/auth.sh` again only when the persisted GitHub token is no longer 
 
 Keep `useResponsesApiWebSocket` set to `false` in `/data/config.json`. This avoids a known Codex/copilot-api failure mode where the upstream Responses WebSocket stream closes before `response.completed`, often after `internal_chat_message_metadata_passthrough` or transient `service_unavailable` errors.
 
+The ingress proxy also sanitizes Codex `/responses` and `/v1/responses` JSON requests before forwarding them to `copilot-api`. It strips `internal_chat_message_metadata_passthrough` fields and the optional `id` / `status` fields from echoed `custom_tool_call` items, matching known upstream issue workarounds for rejected Codex conversation state.
+
 ## Validate
 
 ```sh
 ./scripts/hardening.sh
 ./scripts/smoke.sh
+./scripts/regression-internal-metadata.sh
+./scripts/regression-custom-tool-call-id.sh
 ```
 
 `hardening.sh` confirms only ingress publishes a loopback port and only `copilot-api` mounts auth state. `smoke.sh` confirms `/v1/models`, `/v1/responses`, and `/v1/messages` work through the local endpoint.
