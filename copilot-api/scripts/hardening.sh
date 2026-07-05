@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-host_port="${COPILOT_API_HOST_PORT:-44141}"
+host_port="${COPILOT_API_HOST_PORT:-4000}"
 
 fail() {
   echo "hardening check failed: $*" >&2

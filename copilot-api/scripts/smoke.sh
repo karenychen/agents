@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-base_url="${COPILOT_API_BASE_URL:-http://127.0.0.1:44141}"
+base_url="${COPILOT_API_BASE_URL:-http://127.0.0.1:4000}"
 api_key="${COPILOT_API_KEY:-}"
 model="${COPILOT_API_MODEL:-gpt-5.5}"
 messages_model="${COPILOT_API_MESSAGES_MODEL:-claude-sonnet-5}"

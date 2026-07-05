@@ -1,6 +1,6 @@
 # Copilot API Local Gateway
 
-This stack runs a local `copilot-api` gateway on `http://127.0.0.1:44141`.
+This stack runs a local `copilot-api` gateway on `http://127.0.0.1:4000`.
 
 ## Start
 

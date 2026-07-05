@@ -23,7 +23,7 @@ services:
       LISTEN_HOST: 0.0.0.0
       LISTEN_PORT: "4000"
     ports:
-      - "127.0.0.1:${COPILOT_API_HOST_PORT:-44141}:4000"
+      - "127.0.0.1:${COPILOT_API_HOST_PORT:-4000}:4000"
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
     networks:
