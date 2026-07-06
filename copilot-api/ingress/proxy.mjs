@@ -20,6 +20,7 @@ const hopByHopHeaders = new Set([
 
 const responsePaths = new Set(["/responses", "/v1/responses"])
 const maxBufferedRequestBytes = 128 * 1024 * 1024
+const dropValue = Symbol("dropValue")
 
 function forwardHeaders(headers) {
   const forwarded = {}
@@ -65,7 +66,9 @@ function readRequestBody(clientRequest) {
 
 function sanitizeResponsesValue(value) {
   if (Array.isArray(value)) {
-    return value.map(sanitizeResponsesValue)
+    return value
+      .map(sanitizeResponsesValue)
+      .filter((item) => item !== dropValue)
   }
 
   if (value === null || typeof value !== "object") {
@@ -73,6 +76,13 @@ function sanitizeResponsesValue(value) {
   }
 
   const isCustomToolCall = value.type === "custom_tool_call"
+  if (
+    "encrypted_content" in value
+    && (value.type === "reasoning" || value.type === "compaction")
+  ) {
+    return dropValue
+  }
+
   const sanitized = {}
   for (const [key, childValue] of Object.entries(value)) {
     if (key === "internal_chat_message_metadata_passthrough") {

@@ -12,8 +12,8 @@ cat >"${request_file}" <<'JSON'
   "stream": true,
   "input": [
     {
-      "type": "reasoning",
-      "summary": [],
+      "type": "compaction",
+      "id": "compaction-item-with-stale-encrypted-state",
       "encrypted_content": "gAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
     },
     {
@@ -35,7 +35,7 @@ curl -fsS -N "${base_url}/responses" \
   --data-binary @"${request_file}" \
   -o "${response_file}"
 
-if grep -q "encrypted content" "${response_file}"; then
+if grep -Eq "encrypted content|encrypted_content" "${response_file}"; then
   echo "encrypted content reached upstream" >&2
   cat "${response_file}" >&2
   exit 1
