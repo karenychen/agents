@@ -1,0 +1,4 @@
+interface:
+  display_name: "Copilot Reviewer"
+  short_description: "Single-model Copilot review with PR worktree prep"
+  default_prompt: "Use $copilot-reviewer to prepare a review worktree if needed and review my changes with one Copilot CLI model."
