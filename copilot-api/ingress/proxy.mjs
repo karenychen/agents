@@ -78,6 +78,9 @@ function sanitizeResponsesValue(value) {
     if (key === "internal_chat_message_metadata_passthrough") {
       continue
     }
+    if (key === "encrypted_content") {
+      continue
+    }
     if (isCustomToolCall && (key === "id" || key === "status")) {
       continue
     }
