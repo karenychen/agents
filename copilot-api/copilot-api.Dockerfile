@@ -1,6 +1,6 @@
 FROM node:24-alpine
 
-ARG COPILOT_API_VERSION=1.13.16
+ARG COPILOT_API_VERSION=1.14.9
 
 RUN npm install -g "@jeffreycao/copilot-api@${COPILOT_API_VERSION}" \
   && npm cache clean --force \

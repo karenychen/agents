@@ -8,7 +8,7 @@ trap 'rm -f "${request_file}" "${response_file}"' EXIT
 
 cat >"${request_file}" <<'JSON'
 {
-  "model": "gpt-5.5",
+  "model": "gpt-5.5[1m]",
   "stream": true,
   "tools": [
     {
