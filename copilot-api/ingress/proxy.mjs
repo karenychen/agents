@@ -21,6 +21,11 @@ const hopByHopHeaders = new Set([
 const responsePaths = new Set(["/responses", "/v1/responses"])
 const maxBufferedRequestBytes = 128 * 1024 * 1024
 const dropValue = Symbol("dropValue")
+const compactionHeaders = {
+  "openai-intent": "conversation-agent",
+  "x-initiator": "agent",
+  "x-interaction-type": "conversation-compaction",
+}
 
 function forwardHeaders(headers) {
   const forwarded = {}
@@ -96,13 +101,34 @@ function sanitizeResponsesValue(value) {
   return sanitized
 }
 
-function sanitizeRequestBody(body) {
+function hasTerminalCompactionTrigger(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false
+  }
+
+  const { input } = value
+  if (!Array.isArray(input) || input.length === 0) {
+    return false
+  }
+
+  const terminalItem = input.at(-1)
+  return (
+    terminalItem !== null
+    && typeof terminalItem === "object"
+    && !Array.isArray(terminalItem)
+    && terminalItem.type === "compaction_trigger"
+  )
+}
+
+function prepareRequestBody(body) {
   try {
-    return Buffer.from(
-      JSON.stringify(sanitizeResponsesValue(JSON.parse(body.toString("utf8")))),
-    )
+    const payload = JSON.parse(body.toString("utf8"))
+    return {
+      body: Buffer.from(JSON.stringify(sanitizeResponsesValue(payload))),
+      headers: hasTerminalCompactionTrigger(payload) ? compactionHeaders : {},
+    }
   } catch {
-    return body
+    return { body, headers: {} }
   }
 }
 
@@ -134,8 +160,16 @@ function writePayloadTooLarge(clientResponse) {
   )
 }
 
-function createUpstreamRequest(clientRequest, clientResponse, body) {
-  const headers = forwardHeaders(clientRequest.headers)
+function createUpstreamRequest(
+  clientRequest,
+  clientResponse,
+  body,
+  additionalHeaders = {},
+) {
+  const headers = {
+    ...forwardHeaders(clientRequest.headers),
+    ...additionalHeaders,
+  }
   if (body) {
     headers["content-length"] = String(body.length)
   }
@@ -179,10 +213,12 @@ const server = http.createServer(async (clientRequest, clientResponse) => {
 
   try {
     const body = await readRequestBody(clientRequest)
+    const preparedRequest = prepareRequestBody(body)
     createUpstreamRequest(
       clientRequest,
       clientResponse,
-      sanitizeRequestBody(body),
+      preparedRequest.body,
+      preparedRequest.headers,
     )
   } catch {
     writePayloadTooLarge(clientResponse)
