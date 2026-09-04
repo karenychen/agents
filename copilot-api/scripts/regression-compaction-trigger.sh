@@ -38,6 +38,7 @@ const server = http.createServer((request, response) => {
       JSON.stringify({
         body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
         headers: request.headers,
+        path: request.url,
       }),
     )
     response.writeHead(200, { "content-type": "application/json" })
@@ -69,7 +70,7 @@ for _ in {1..50}; do
   sleep 0.1
 done
 
-curl -fsS "http://127.0.0.1:${ingress_port}/v1/responses" \
+curl -fsS "http://127.0.0.1:${ingress_port}/responses/compact" \
   -H "Content-Type: application/json" \
   -H "OpenAI-Intent: conversation-edits" \
   -H "X-Initiator: user" \
@@ -82,9 +83,6 @@ curl -fsS "http://127.0.0.1:${ingress_port}/v1/responses" \
       "type": "message",
       "role": "user",
       "content": "Summarize the conversation."
-    },
-    {
-      "type": "compaction_trigger"
     }
   ]
 }
@@ -94,6 +92,11 @@ node - "${capture_file}" <<'JS'
 import fs from "node:fs"
 
 const request = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+if (request.path !== "/responses") {
+  console.error(`expected upstream path /responses, got ${request.path}`)
+  process.exit(1)
+}
+
 const expectedHeaders = {
   "openai-intent": "conversation-agent",
   "x-initiator": "agent",

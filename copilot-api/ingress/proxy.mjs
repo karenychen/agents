@@ -18,7 +18,15 @@ const hopByHopHeaders = new Set([
   "upgrade",
 ])
 
-const responsePaths = new Set(["/responses", "/v1/responses"])
+const compactResponsePaths = new Map([
+  ["/responses/compact", "/responses"],
+  ["/v1/responses/compact", "/v1/responses"],
+])
+const responsePaths = new Set([
+  "/responses",
+  "/v1/responses",
+  ...compactResponsePaths.keys(),
+])
 const maxBufferedRequestBytes = 128 * 1024 * 1024
 const dropValue = Symbol("dropValue")
 const compactionHeaders = {
@@ -47,6 +55,13 @@ function shouldSanitizeRequest(clientRequest) {
     && responsePaths.has(path)
     && String(contentType).toLowerCase().includes("application/json")
   )
+}
+
+function upstreamRequestPath(clientRequest) {
+  const requestUrl = new URL(clientRequest.url ?? "/", "http://localhost")
+  requestUrl.pathname =
+    compactResponsePaths.get(requestUrl.pathname) ?? requestUrl.pathname
+  return `${requestUrl.pathname}${requestUrl.search}`
 }
 
 function readRequestBody(clientRequest) {
@@ -81,10 +96,7 @@ function sanitizeResponsesValue(value) {
   }
 
   const isCustomToolCall = value.type === "custom_tool_call"
-  if (
-    "encrypted_content" in value
-    && (value.type === "reasoning" || value.type === "compaction")
-  ) {
+  if ("encrypted_content" in value && value.type === "reasoning") {
     return dropValue
   }
 
@@ -120,12 +132,22 @@ function hasTerminalCompactionTrigger(value) {
   )
 }
 
-function prepareRequestBody(body) {
+function prepareRequestBody(body, compactRequest) {
   try {
     const payload = JSON.parse(body.toString("utf8"))
+    if (
+      compactRequest
+      && Array.isArray(payload.input)
+      && !hasTerminalCompactionTrigger(payload)
+    ) {
+      payload.input.push({ type: "compaction_trigger" })
+    }
     return {
       body: Buffer.from(JSON.stringify(sanitizeResponsesValue(payload))),
-      headers: hasTerminalCompactionTrigger(payload) ? compactionHeaders : {},
+      headers:
+        compactRequest || hasTerminalCompactionTrigger(payload)
+          ? compactionHeaders
+          : {},
     }
   } catch {
     return { body, headers: {} }
@@ -165,6 +187,7 @@ function createUpstreamRequest(
   clientResponse,
   body,
   additionalHeaders = {},
+  path = clientRequest.url,
 ) {
   const headers = {
     ...forwardHeaders(clientRequest.headers),
@@ -180,7 +203,7 @@ function createUpstreamRequest(
       hostname: upstreamOrigin.hostname,
       port: upstreamOrigin.port,
       method: clientRequest.method,
-      path: clientRequest.url,
+      path,
       headers,
     },
     (upstreamResponse) => {
@@ -213,12 +236,20 @@ const server = http.createServer(async (clientRequest, clientResponse) => {
 
   try {
     const body = await readRequestBody(clientRequest)
-    const preparedRequest = prepareRequestBody(body)
+    const requestPath = new URL(
+      clientRequest.url ?? "/",
+      "http://localhost",
+    ).pathname
+    const preparedRequest = prepareRequestBody(
+      body,
+      compactResponsePaths.has(requestPath),
+    )
     createUpstreamRequest(
       clientRequest,
       clientResponse,
       preparedRequest.body,
       preparedRequest.headers,
+      upstreamRequestPath(clientRequest),
     )
   } catch {
     writePayloadTooLarge(clientResponse)

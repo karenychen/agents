@@ -25,7 +25,7 @@ Run `./scripts/auth.sh` again only when the persisted GitHub token is no longer 
 
 Keep `useResponsesApiWebSocket` set to `false` in `/data/config.json`. This avoids a known Codex/copilot-api failure mode where the upstream Responses WebSocket stream closes before `response.completed`, often after `internal_chat_message_metadata_passthrough` or transient `service_unavailable` errors.
 
-The ingress proxy also sanitizes Codex `/responses` and `/v1/responses` JSON requests before forwarding them to `copilot-api`. It marks requests ending in `compaction_trigger` with Copilot's compaction headers, strips `internal_chat_message_metadata_passthrough`, drops stale encrypted `reasoning` / `compaction` state items, preserves encrypted agent-message content used to start subagents, and strips the optional `id` / `status` fields from echoed `custom_tool_call` items, matching known upstream issue workarounds for rejected Codex conversation state.
+The ingress proxy also sanitizes Codex Responses JSON requests before forwarding them to `copilot-api`. It translates `/responses/compact` and `/v1/responses/compact` to their supported Responses routes with a terminal `compaction_trigger`, marks compaction requests with Copilot's compaction headers, strips `internal_chat_message_metadata_passthrough`, drops stale encrypted `reasoning` items, preserves encrypted compaction state and agent-message content, and strips the optional `id` / `status` fields from echoed `custom_tool_call` items, matching known upstream issue workarounds for rejected Codex conversation state.
 
 ## Validate
 
