@@ -27,6 +27,8 @@ Keep `useResponsesApiWebSocket` set to `false` in `/data/config.json`. This avoi
 
 The ingress proxy also sanitizes Codex Responses JSON requests before forwarding them to `copilot-api`. It translates `/responses/compact` and `/v1/responses/compact` to their supported Responses routes with a terminal `compaction_trigger`, marks compaction requests with Copilot's compaction headers, strips `internal_chat_message_metadata_passthrough`, drops stale encrypted `reasoning` items, preserves encrypted compaction state and agent-message content, and strips the optional `id` / `status` fields from echoed `custom_tool_call` items, matching known upstream issue workarounds for rejected Codex conversation state.
 
+If a client disconnects before the upstream response arrives, ingress cancels the upstream request instead of terminating the proxy process.
+
 ## Validate
 
 ```sh
@@ -34,6 +36,7 @@ The ingress proxy also sanitizes Codex Responses JSON requests before forwarding
 ./scripts/smoke.sh
 ./scripts/regression-agent-message-encrypted-content.sh
 ./scripts/regression-compaction-trigger.sh
+./scripts/regression-client-disconnect.sh
 ./scripts/regression-encrypted-content.sh
 ./scripts/regression-internal-metadata.sh
 ./scripts/regression-custom-tool-call-id.sh

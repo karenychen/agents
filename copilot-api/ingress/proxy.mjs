@@ -189,6 +189,10 @@ function createUpstreamRequest(
   additionalHeaders = {},
   path = clientRequest.url,
 ) {
+  if (clientResponse.destroyed) {
+    return
+  }
+
   const headers = {
     ...forwardHeaders(clientRequest.headers),
     ...additionalHeaders,
@@ -207,17 +211,33 @@ function createUpstreamRequest(
       headers,
     },
     (upstreamResponse) => {
+      if (clientResponse.destroyed) {
+        upstreamResponse.destroy()
+        return
+      }
       clientResponse.writeHead(
         upstreamResponse.statusCode ?? 502,
         upstreamResponse.statusMessage,
         forwardHeaders(upstreamResponse.headers),
       )
-      pipeline(upstreamResponse, clientResponse, () => {})
+      pipeline(upstreamResponse, clientResponse, (error) => {
+        if (error && !clientResponse.destroyed) {
+          clientResponse.destroy(error)
+        }
+      })
     },
   )
 
   upstreamRequest.on("error", () => {
-    writeBadGateway(clientResponse)
+    if (!clientResponse.destroyed) {
+      writeBadGateway(clientResponse)
+    }
+  })
+
+  clientResponse.on("close", () => {
+    if (!clientResponse.writableEnded) {
+      upstreamRequest.destroy()
+    }
   })
 
   if (body) {
