@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crowd Reviewer"
+  short_description: "Multi-model Copilot review with PR worktree prep"
+  default_prompt: "Use $crowd-reviewer to prepare a review worktree if needed and run a multi-model owner-style review."
