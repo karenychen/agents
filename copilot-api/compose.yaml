@@ -1,0 +1,89 @@
+name: copilot-api-local
+
+x-hardened: &hardened
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  read_only: true
+  pids_limit: 256
+  mem_limit: 512m
+  cpus: "1.0"
+  restart: unless-stopped
+
+services:
+  copilot-api-ingress:
+    <<: *hardened
+    build:
+      context: ./ingress
+    image: copilot-api-local-ingress
+    container_name: copilot-api-ingress
+    environment:
+      UPSTREAM_ORIGIN: http://copilot-api:4141
+      LISTEN_HOST: 0.0.0.0
+      LISTEN_PORT: "4000"
+    ports:
+      - "127.0.0.1:${COPILOT_API_HOST_PORT:-4000}:4000"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    networks:
+      - copilot_api_ingress
+      - copilot_api_internal
+    depends_on:
+      copilot-api:
+        condition: service_started
+
+  copilot-api:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: copilot-api.Dockerfile
+    image: copilot-api-local
+    container_name: copilot-api
+    environment:
+      COPILOT_API_HOME: /data
+      HOME: /tmp
+      NODE_ENV: production
+      NODE_OPTIONS: --use-env-proxy
+      NODE_USE_SYSTEM_CA: "1"
+      HTTP_PROXY: http://copilot-api-egress:3128
+      HTTPS_PROXY: http://copilot-api-egress:3128
+      http_proxy: http://copilot-api-egress:3128
+      https_proxy: http://copilot-api-egress:3128
+      NO_PROXY: 127.0.0.1,localhost,copilot-api
+      no_proxy: 127.0.0.1,localhost,copilot-api
+    volumes:
+      - copilot_api_data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    networks:
+      - copilot_api_internal
+    depends_on:
+      copilot-api-egress:
+        condition: service_started
+
+  copilot-api-egress:
+    <<: *hardened
+    build:
+      context: ./egress
+    image: copilot-api-local-egress
+    container_name: copilot-api-egress
+    environment:
+      LISTEN_HOST: 0.0.0.0
+      LISTEN_PORT: "3128"
+      ALLOWED_HOSTS: github.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,api.business.githubcopilot.com,api.enterprise.githubcopilot.com
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    networks:
+      - copilot_api_internal
+      - copilot_api_egress
+
+networks:
+  copilot_api_ingress:
+    driver: bridge
+  copilot_api_internal:
+    internal: true
+  copilot_api_egress: {}
+
+volumes:
+  copilot_api_data: {}

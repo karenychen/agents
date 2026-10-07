@@ -1,9 +1,0 @@
-{
-  "apiKeyHelper": "/Users/<you>/.local/bin/litellm-master-key",
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",
-    "ANTHROPIC_MODEL": "claude-sonnet-5",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4.8"
-  }
-}
